@@ -24,6 +24,15 @@
 				<button type="submit">Sign up</button>
 			</form>
 			<hr>
+			<p class="help">
+				<% 
+				if (typeof message === "undefined") {
+
+				}else{ %>
+				  <br>
+				  <%= message %>
+				<% } %>
+			  </p>
 			<p class="help">Already have an account? <a href="/login">Sign in</a></p>
 		</section>
 		<footer class="info">

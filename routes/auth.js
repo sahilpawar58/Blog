@@ -8,13 +8,35 @@ var GoogleStrategy = require('passport-google-oidc');
 
 var con = require('../mysql');
 var db = require('../db');
+const { resolve } = require('path');
+
+
+function checkAccount(username) {
+  return new Promise((resolve, reject) => {
+    con.query('Select * from users where username= ?', [username], (err, results) => {
+      if (err) {
+        reject(err);
+      } else {
+        if (results.length > 0) {
+          resolve(true);
+        } else {
+          resolve(false);
+        }
+      }
+    });
+  });
+}
+
+
 
 
 passport.use(new LocalStrategy(function verify(username, password, cb) {
+
+  // Pass the username as an argument when calling the function
+  
   con.query('SELECT * FROM users WHERE username = ?', [username], function (err, rows) {
     if (err) { return cb(err); }
     if (!rows || rows.length === 0) { return cb(null, false, { message: 'Incorrect username or password.' }); }
-
     const row = rows[0]; // Extract the first row
     console.log(password)
     crypto.pbkdf2(password, row.salt, 310000, 32, 'sha256', function (err, hashedPassword) {
@@ -142,6 +164,18 @@ router.get('/signup', function(req, res, next) {
 });
 
 router.post('/signup', function(req, res, next) {
+    let accountPresent = checkAccount(req.body.username);
+    accountPresent.then( function(value) { 
+      console.log('value'+value);
+      if(value){
+        res.locals.message = "Account exists!";
+        res.render("signup", res.locals);
+        // res.redirect('/');
+      }
+    },
+    function(error) { 
+      return next(err); }
+    )
     var salt = crypto.randomBytes(16);
     crypto.pbkdf2(req.body.password, salt, 310000, 32, 'sha256', function(err, hashedPassword) {
       if (err) { return next(err); }
