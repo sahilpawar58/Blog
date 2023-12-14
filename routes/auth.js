@@ -30,6 +30,60 @@ passport.use(new LocalStrategy(function verify(username, password, cb) {
   });
 }));
 
+passport.use(new GoogleStrategy({
+  clientID: process.env['GOOGLE_CLIENT_ID'],
+  clientSecret: process.env['GOOGLE_CLIENT_SECRET'],
+  callbackURL: '/oauth2/redirect/google',
+  scope: ['profile']
+}, function verify(issuer, profile, cb) {
+  con.query('SELECT * FROM federated_credentials WHERE provider = ? AND subject = ?', [
+    issuer,
+    profile.id
+  ], function (err, rows) {
+    if (err) { return cb(err); }
+
+    if (!rows || rows.length === 0) {
+      // If no rows found, insert a new user and federated credentials
+      con.query('INSERT INTO users (name,username) VALUES (?,?)', [
+        profile.displayName,
+        profile.name.givenName
+      ], function (err, result) {
+        if (err) { return cb(err); }
+
+        const id = result.insertId;
+
+        con.query('INSERT INTO federated_credentials (user_id, provider, subject) VALUES (?, ?, ?)', [
+          id,
+          issuer,
+          profile.id
+        ], function (err) {
+          if (err) { return cb(err); }
+
+          var user = {
+            id: id,
+            name: profile.displayName
+          };
+
+          return cb(null, user);
+        });
+      });
+    } else {
+      const row = rows[0];
+
+      con.query('SELECT * FROM users WHERE id = ?', [row.user_id], function (err, userRows) {
+        if (err) { return cb(err); }
+
+        if (!userRows || userRows.length === 0) {
+          return cb(null, false);
+        }
+
+        const user = userRows[0];
+        return cb(null, user);
+      });
+    }
+  });
+}));
+
 
 // passport.use(new LocalStrategy(function verify(username, password, cb) {
 //     db.get('SELECT * FROM users WHERE username = ?', [ username ], function(err, row) {
@@ -48,7 +102,7 @@ passport.use(new LocalStrategy(function verify(username, password, cb) {
 
   passport.serializeUser(function(user, cb) {
     process.nextTick(function() {
-      cb(null, { id: user.id, username: user.username });
+      cb(null, { id: user.id, username: user.username, name: user.name });
     });
   });
   
@@ -65,6 +119,11 @@ router.get('/login', function(req, res, next) {
 });
 
 router.get('/login/federated/google', passport.authenticate('google'));
+
+router.get('/oauth2/redirect/google', passport.authenticate('google', {
+  successRedirect: '/',
+  failureRedirect: '/login'
+}));
 
 router.post('/login/password', passport.authenticate('local', {
     successRedirect: '/',
